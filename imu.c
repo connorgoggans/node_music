@@ -1,9 +1,11 @@
-/*******************************************************************************
+/*********************************************************************************
 * imu.c
 *
-* This serves as an example of how to read the IMU with direct reads to the
-* sensor registers. To use the DMP or interrupt-driven timing see test_dmp.c
-*******************************************************************************/
+* This program uses the beaglebone blue's accelerometer and gyroscope, which are
+* located in the IMU, to detect user gestures. The gestures express the user's 
+* wish to adjust the volume or move to the prev/next song. Once a gesture is 
+* detected, the music control API to sends out a POST message to the music server.
+*********************************************************************************/
 
 #include <rc_usefulincludes.h>
 #include <roboticscape.h>
