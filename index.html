@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+        crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.1.1.min.js" integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
+        crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+        crossorigin="anonymous"></script>
+    <!--- <link rel="stylesheet" href="/css/base.css"> -->
+    <title>BBB Audio</title>
+</head>
+
+<body class="container-fluid" onload="onLoad();">
+    <div class="row">
+        <h4 id="playing"></h4>
+    </div>
+    <div class="row">
+        <div class="col-sm-12">
+            <button onclick="back();">Back</button>
+            <button id="playpause" onclick="startstop();">Play</button>
+            <button onclick="next();">Next</button>
+        </div>
+    </div>
+    <div class="row">
+        <h5>Song List</h5>
+    </div>
+    <div class="row">
+        <ul id="songs"></ul>
+    </div>
+</body>
+
+</html>
+
+<script>
+    //on load grab all songs
+    function onLoad() {
+        $.ajax({
+            type: "GET",
+            url: "/songs",
+            success: function (data) {
+                document.getElementById('playing').innerHTML = data[0];
+                data.forEach((item) => {
+                    $("#songs").append("<li>" + item + "</li>");
+                })
+            }
+        });
+    }
+
+    //executes the request for going back one song
+    function back() {
+        let text = document.getElementById('playpause').innerHTML;
+        if (text != "Stop") {
+            document.getElementById('playpause').innerHTML = "Stop";
+        }
+
+        $.ajax({
+            type: "POST",
+            url: "/previous",
+            success: function (data) {
+                document.getElementById('playing').innerHTML = data;
+            }
+        });
+    }
+
+    //executes the request for going forward one song
+    function next() {
+        let text = document.getElementById('playpause').innerHTML;
+        if (text != "Stop") {
+            document.getElementById('playpause').innerHTML = "Stop";
+        }
+
+        $.ajax({
+            type: "POST",
+            url: "/next",
+            success: function (data) {
+                document.getElementById('playing').innerHTML = data;
+            }
+        });
+    }
+
+    //handles pause/play actions
+    function startstop() {
+        let text = document.getElementById('playpause').innerHTML;
+        if (text == 'Play') {
+            $.ajax({
+                type: "POST",
+                url: "/play",
+                success: function (data) {
+                    document.getElementById('playpause').innerHTML = 'Stop'
+                    document.getElementById('playing').innerHTML = data;
+                }
+            });
+        } else {
+            $.ajax({
+                type: "POST",
+                url: "/pause",
+                success: function () {
+                    document.getElementById('playpause').innerHTML = 'Play'
+                }
+            });
+        }
+    }
+</script>
