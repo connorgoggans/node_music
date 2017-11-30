@@ -1,5 +1,5 @@
 /*******************************************************************************
-* rc_test_imu.c
+* imu.c
 *
 * This serves as an example of how to read the IMU with direct reads to the
 * sensor registers. To use the DMP or interrupt-driven timing see test_dmp.c
@@ -12,25 +12,19 @@
 #include <curl/curl.h>
 #include <alsa/asoundlib.h>
 
-// possible modes, user selected with command line arguments
-typedef enum m_mode_t {
-	RAD,
-	DEG,
-	RAW
-} m_mode_t;
+#define VOLUME_THRESHOLD 5.0
+#define TOGGLE_SONG_THRESHOLD 100.0
 
 void curl(char *endpoint);
 void setVolume(long newVolume);
 
 long curVolume = 50;
 
-int main(int argc, char *argv[])
+int main()
 {
 	rc_imu_data_t data; //struct to hold new data
-	int c;
-	m_mode_t mode = DEG; // default to radian mode.
 
-	// initialize hardware first
+	// initialize robotics cape hardware
 	if (rc_initialize())
 	{
 		fprintf(stderr, "ERROR: failed to run rc_initialize(), are you root?\n");
@@ -41,106 +35,67 @@ int main(int argc, char *argv[])
 	rc_imu_config_t conf = rc_default_imu_config();
 	conf.enable_magnetometer = 1;
 
+	// initialize imu unit on the robotics cape
 	if (rc_initialize_imu(&data, conf))
 	{
 		fprintf(stderr, "rc_initialize_imu_failed\n");
 		return -1;
 	}
 
-	// print a header
-	printf("\ntry 'test_imu -h' to see other options\n\n");
-	switch (mode)
-	{
-	case RAD:
-		printf("   Accel XYZ(m/s^2)  |");
-		printf("   Gyro XYZ (rad/s)  |");
-		break;
-	case DEG:
-		printf("   Gyro XYZ (deg/s)  ");
-		break;
-	case RAW:
-		printf("  Accel XYZ(raw adc) |");
-		printf("  Gyro XYZ (raw adc) |");
-		break;
-	default:
-		printf("ERROR: invalid mode\n");
-		return -1;
-	}
-	printf("\n");
-
-	if (rc_read_accel_data(&data) < 0)
-	{
-		printf("read gyro data failed\n");
-	}
-
+	// initialize time struct for song toggle timeout
 	struct timespec time_spec;
 	clock_gettime(CLOCK_REALTIME, &time_spec);
 	int newtime = time_spec.tv_sec++;
 	int time = newtime;
 
-	float origx = data.accel[0];
-	float origy = data.accel[1];
-	float origz = data.accel[2];
-
-	float fx = 0;
-	float fy = 0;
-	float fz = 0;
-
-	//printf("original values: %6.1f %6.1f %6.1f |\n", origx, origy, origz);
-	//now just wait, print_data will run
-
 	curl("play");
 	while (rc_get_state() != EXITING)
 	{
-		printf("\r");
-
-		//accelerometer stuff
-		// print accel
+		// read data from accelerometer for volume control
 		if (rc_read_accel_data(&data) < 0)
 		{
 			printf("read accel data failed\n");
 		}
 		float x = data.accel[0];
-		float z = data.accel[1];
-		float y = data.accel[2];
-		//printf("%6.2f %6.2f %6.2f \n",data.accel[0],data.accel[1],data.accel[2]);
+		// DEBUG: print accelerometer output
+		// printf("%6.2f %6.2f %6.2f \n",data.accel[0],data.accel[1],data.accel[2]);
 
-		if (x > 5.0)
+		// adjust volume if the x-axis acceleration exceeds the threshold
+		if (x > VOLUME_THRESHOLD)
 		{
 			printf("volume +++++++++++++++++++++++++++\n");
 			curVolume = curVolume + 2;
 			setVolume(curVolume);
 		}
-		else if (x < -5.0)
+		else if (x < -1.0 * VOLUME_THRESHOLD)
 		{
 			printf("volume ---------------------------\n");
 			curVolume = curVolume - 2;
 			setVolume(curVolume);
 		}
 
-		// print gyro data
+		// read data from gyroscope to toggle song
 		if (rc_read_gyro_data(&data) < 0)
 		{
 			printf("read gyro data failed\n");
 		}
-		float newY = data.gyro[1];
+		// DEBUG: print gyroscope output
+		// printf("%6.1f %6.1f %6.1f |\n",	data.gyro[0],data.gyro[1],data.gyro[2]);
 
-		//printf("%6.1f %6.1f %6.1f |\n",	data.gyro[0],\
-						data.gyro[1],\
-						data.gyro[2]);
-		//printf("gyro diff: %f\n", newY - origy);
+		// Check for z-axis rotation if timeout is not enabled
 		clock_gettime(CLOCK_REALTIME, &time_spec);
 		newtime = time_spec.tv_sec;
 		if (newtime >= time)
 		{
-
-			if (data.gyro[2] < -100.0)
+			// toggle song if the z-axis rotation exceeds the threshold
+			float z = data.gyro[2];
+			if (z < -1.0 * TOGGLE_SONG_THRESHOLD)
 			{
 				printf("next song >>>>>>>>>>>>>>>\n");
 				curl("next");
 				time = newtime + 2;
 			}
-			else if (data.gyro[2] > 100.0)
+			else if (z > TOGGLE_SONG_THRESHOLD)
 			{
 				printf("prev song <<<<<<<<<<<<<<<\n");
 				curl("previous");
@@ -148,9 +103,9 @@ int main(int argc, char *argv[])
 			}
 		}
 		rc_usleep(200000);
-		//fflush(stdout);
 	}
 
+	// cleanup imu and robotics cape resources before exiting
 	rc_power_off_imu();
 	rc_cleanup();
 	return 0;
