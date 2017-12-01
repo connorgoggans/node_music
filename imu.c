@@ -5,6 +5,9 @@
 * located in the IMU, to detect user gestures. The gestures express the user's 
 * wish to adjust the volume or move to the prev/next song. Once a gesture is 
 * detected, the music control API to sends out a POST message to the music server.
+*
+* Additionaly, this program detects a level change (rising edge) on a GPIO pin
+* and activates an interrupt.
 *********************************************************************************/
 
 #include <rc_usefulincludes.h>
@@ -13,6 +16,7 @@
 #include <stdio.h>
 #include <curl/curl.h>
 #include <alsa/asoundlib.h>
+#include <poll.h>
 
 #define VOLUME_THRESHOLD 5.0
 #define TOGGLE_SONG_THRESHOLD 100.0
@@ -21,6 +25,8 @@ void curl(char *endpoint);
 void setVolume(long newVolume);
 
 long curVolume = 50;
+int button = 113; //GPIO3_17
+int count = 0;
 
 int main()
 {
@@ -50,9 +56,34 @@ int main()
 	int newtime = time_spec.tv_sec++;
 	int time = newtime;
 
+	//GPIO handling
+ 	rc_set_pinmux_mode(button, PINMUX_GPIO_PD);
+	rc_gpio_export(button);
+	rc_gpio_set_dir(button, INPUT_PIN);
+	rc_gpio_set_edge(button, EDGE_RISING);
+
+	//initizialize variables for interrupts
+	struct pollfd fd[1];
+	int button_fd = rc_gpio_fd_open(button);
+	char buf[1];
+	fd[0].fd = button_fd;
+	fd[0].events = POLLPRI|POLLERR;
+	int timeout = -1; //-1 -> infinite timeout
+
 	curl("play");
+	read(fd[0].fd, buf, 1); //readies pin for reading
 	while (rc_get_state() != EXITING)
 	{
+		poll(fd, 1, timeout);
+		if(fd[0].revents = POLLPRI){
+			//ISR IS HERE
+			printf("%d ",count);
+			count = count + 1;
+			printf("Holy moly it's an interrupt\n"); //placeholder
+			lseek(fd[0].fd, 0 , SEEK_SET);
+			read(fd[0].fd, buf, 1);
+		}
+
 		// read data from accelerometer for volume control
 		if (rc_read_accel_data(&data) < 0)
 		{
@@ -104,11 +135,13 @@ int main()
 				time = newtime + 2;
 			}
 		}
+
 		rc_usleep(200000);
 	}
 
 	// cleanup imu and robotics cape resources before exiting
 	rc_power_off_imu();
+	rc_gpio_unexport(button);
 	rc_cleanup();
 	return 0;
 }
