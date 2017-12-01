@@ -6,7 +6,7 @@ let express = require('express');
 let fs = require('fs');
 let logger = require('morgan');
 let path = require('path');
-let Mplayer = require('node-mplayer');
+let Mplayer = require('mplayer');
 
 //Init express application
 let app = express();
@@ -27,7 +27,8 @@ let songList = fs.readdirSync('music');
 let status = {
     audio: undefined,
     playing: false,
-    curSong: 0
+    curSong: 0,
+    volume: 50
 }
 
 //default endpoint for serving the webpage
@@ -38,22 +39,48 @@ app.get('/', function (req, res) {
 //Just plays the current song in the queue
 app.post('/play', function (req, res) {
     //create an audio object and save it to the state
-    /*
-    status["audio"] = player.play("music/" + songList[status["curSong"]], { mplayer: ['-ao', 'alsa:device=hw=1'] }, (err) => {
-        if (err) throw err
-    });
+    if(status['audio']){
+        status['audio'].play();
+    }else{
+        let player = new Mplayer();
+        player.openFile("music/" + songList[status["curSong"]]);
+        player.play();
+        status['audio'] = player;
+        status['playing'] = true;
+        status['volume'] = 50;
+    }
+    
+    res.status(200).send(songList[status["curSong"]]);
+});
 
-    status["playing"] = true;
-    res.status(200).send(songList[status["curSong"]]);
-    */
-    //status["audio"] = new mplayer("music/" + songList[status["curSong"]]);
-    let player = new Mplayer("music/" + songList[status["curSong"]]);
-    player.play();
-    player.getVolume(function(currentVolume){
-        console.log(currentVolume);
-    });
-    //status['playing'] = true;
-    res.status(200).send(songList[status["curSong"]]);
+app.post('/ivolume', function(req, res){
+    if(status['playing']){
+        let volume = status['volume'];
+        let newVolume = volume + 5;
+        if(newVolume >= 100){
+            status['audio'].volume(100);
+            status['volume'] = 100;
+        }else{
+            status['audio'].volume(newVolume);
+            status['volume'] = newVolume;
+        }
+    }
+    res.status(200).send();
+});
+
+app.post('/dvolume', function(req, res){
+    if(status['playing']){
+        let volume = status['volume'];
+        let newVolume = volume - 5;
+        if(newVolume <= 0){
+            status['audio'].volume(0);
+            status['volume'] = 0;
+        }else{
+            status['audio'].volume(newVolume);
+            status['volume'] = newVolume;
+        }
+    }
+    res.status(200).send();
 });
 
 
@@ -61,7 +88,7 @@ app.post('/play', function (req, res) {
 app.post('/next', function (req, res) {
     //kill current song if it's playing
     if (status["playing"]) {
-        status["audio"].kill();
+        status["audio"].stop();
     }
 
     //find the next song in the queue
@@ -71,9 +98,8 @@ app.post('/next', function (req, res) {
     }
 
     //play the new song and save state
-    status["audio"] = player.play("music/" + songList[nextSong], { mplayer: ['-ao', 'alsa:device=hw=1'] }, (err) => {
-        if (err) throw err
-    });
+    status['audio'].openFile("music/" + songList[nextSong]);
+    status['audio'].play();
 
     //save other states
     status["playing"] = true;
@@ -86,7 +112,7 @@ app.post('/next', function (req, res) {
 app.post('/previous', function (req, res) {
     //kill current song if it's playing
     if (status["playing"]) {
-        status["audio"].kill();
+        status["audio"].stop();
     }
 
     //find the next song in the queue
@@ -96,9 +122,8 @@ app.post('/previous', function (req, res) {
     }
 
     //play the new song and save state
-    status["audio"] = player.play("music/" + songList[nextSong], { mplayer: ['-ao', 'alsa:device=hw=1'] }, (err) => {
-        if (err) throw err
-    });
+    status['audio'].openFile("music/" + songList[nextSong]);
+    status['audio'].play();
 
     //save other states
     status["playing"] = true;
@@ -111,7 +136,7 @@ app.post('/previous', function (req, res) {
 app.post('/pause', function (req, res) {
     //if something is playing, stop it
     if (status["playing"]) {
-        status["audio"].kill();
+        status["audio"].pause();
         status["playing"] = false;
     }
     res.sendStatus(200);

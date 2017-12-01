@@ -22,11 +22,12 @@
 #define TOGGLE_SONG_THRESHOLD 100.0
 
 void curl(char *endpoint);
-void setVolume(long newVolume);
+void buttonPressed();
 
 long curVolume = 50;
-int button = 113; //GPIO3_17
+//int button = 113; //GPIO3_17
 int count = 0;
+int playing = 0;
 
 int main()
 {
@@ -56,6 +57,7 @@ int main()
 	int newtime = time_spec.tv_sec++;
 	int time = newtime;
 
+	/*
 	//GPIO handling
  	rc_set_pinmux_mode(button, PINMUX_GPIO_PD);
 	rc_gpio_export(button);
@@ -68,21 +70,35 @@ int main()
 	char buf[1];
 	fd[0].fd = button_fd;
 	fd[0].events = POLLPRI|POLLERR;
-	int timeout = -1; //-1 -> infinite timeout
+	int timeout = 10; //-1 -> infinite timeout
+	*/
 
-	curl("play");
-	read(fd[0].fd, buf, 1); //readies pin for reading
+	rc_set_pause_released_func(buttonPressed);
+	//curl("play");
+	//read(fd[0].fd, buf, 1); //readies pin for reading
 	while (rc_get_state() != EXITING)
 	{
+		/*
 		poll(fd, 1, timeout);
 		if(fd[0].revents = POLLPRI){
 			//ISR IS HERE
-			printf("%d ",count);
+			//printf("%d ",count);
 			count = count + 1;
-			printf("Holy moly it's an interrupt\n"); //placeholder
+			if (count % 2 == 0){
+				if(playing){
+					printf("pause\n");
+					playing = 0;
+					curl("pause");
+				}else{
+					printf("play\n");
+					playing = 1;
+					curl("play");
+				}
+			}
 			lseek(fd[0].fd, 0 , SEEK_SET);
 			read(fd[0].fd, buf, 1);
 		}
+		*/
 
 		// read data from accelerometer for volume control
 		if (rc_read_accel_data(&data) < 0)
@@ -98,13 +114,15 @@ int main()
 		{
 			printf("volume +++++++++++++++++++++++++++\n");
 			curVolume = curVolume + 2;
-			setVolume(curVolume);
+			curl("ivolume");
+			//setVolume(curVolume);
 		}
 		else if (x < -1.0 * VOLUME_THRESHOLD)
 		{
 			printf("volume ---------------------------\n");
 			curVolume = curVolume - 2;
-			setVolume(curVolume);
+			curl("dvolume");
+			//setVolume(curVolume);
 		}
 
 		// read data from gyroscope to toggle song
@@ -141,7 +159,7 @@ int main()
 
 	// cleanup imu and robotics cape resources before exiting
 	rc_power_off_imu();
-	rc_gpio_unexport(button);
+	//rc_gpio_unexport(button);
 	rc_cleanup();
 	return 0;
 }
@@ -186,26 +204,12 @@ void curl(char *endpoint)
 	curl_global_cleanup();
 }
 
-void setVolume(long newVolume)
-{
-	long min, max;
-	snd_mixer_t *handle;
-	snd_mixer_selem_id_t *sid;
-	const char *card = "default";
-	const char *selem_name = "Master";
-
-	snd_mixer_open(&handle, 0);
-	snd_mixer_attach(handle, card);
-	snd_mixer_selem_register(handle, NULL, NULL);
-	snd_mixer_load(handle);
-
-	snd_mixer_selem_id_alloca(&sid);
-	snd_mixer_selem_id_set_index(sid, 0);
-	snd_mixer_selem_id_set_name(sid, selem_name);
-	snd_mixer_elem_t *elem = snd_mixer_find_selem(handle, sid);
-
-	snd_mixer_selem_get_playback_volume_range(elem, &min, &max);
-	snd_mixer_selem_set_playback_volume_all(elem, newVolume * max / 100);
-
-	snd_mixer_close(handle);
+void buttonPressed(){
+	if(playing){
+		curl("pause");
+		playing = 0;
+	}else{
+		curl("play");
+		playing = 1;
+	}
 }
